@@ -1,0 +1,143 @@
+Integrating Firebase into your React Beta app involves a multi-step process: installing the library, setting up your localized environment credentials, building a safe client-side cookie validation guard, and executing the configuration at the root of your application.
+Here is your clear, step-by-step implementation guide followed by an interactive simulator to visualize exactly how your traffic behaves under different configuration weights.
+Step 1: Install the Firebase Client SDK
+Run the following installation command in your terminal at the root of your React project:
+
+
+
+Bash
+npm install firebase
+
+
+Step 2: Configure Local Environment Variables
+Create a .env file at the root level of your React repository to safely hold your project's credentials.
+If your React application uses Vite, prefix your variables with VITE_:
+
+
+
+Plaintext
+VITE_FIREBASE_API_KEY=AIzaSyYourBetaKeyHere...
+VITE_FIREBASE_AUTH_DOMAIN=my-first-firebase-app-9b097.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=my-first-firebase-app-9b097
+VITE_FIREBASE_STORAGE_BUCKET=my-first-firebase-app-9b097.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=1234567890
+VITE_FIREBASE_APP_ID=1:1234567890:web:BETAyyyyyyyy
+VITE_FIREBASE_MEASUREMENT_ID=G-YOUR_BETA_MEASUREMENT_ID
+
+
+(Note: If you are using an older Create React App template, use the REACT_APP_ prefix instead).
+Step 3: Initialize the Firebase Hub Instance
+Create a new file named src/firebase.js to initialize the core client application and export your analytical tracking engine:
+
+
+
+JavaScript
+// src/firebase.js
+import { initializeApp, getApps } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+};
+
+// Check if an instance is already alive to support seamless hot-reloads during development
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+export const initAnalytics = async () => {
+  if (typeof window !== "undefined") {
+    return getAnalytics(app);
+  }
+  return null;
+};
+
+export default app;
+
+
+Step 4: Write the Gatekeeper Guard Component
+Create src/components/FirebaseGuard.jsx. This component reads the app_variant cookie that your Angular app writes. If the cookie says "primary" or doesn't exist, it instantly sends the user back to the Angular entry point. If it says "beta", it initializes your analytics stream and lets the user inside.
+
+
+
+JavaScript
+// src/components/FirebaseGuard.jsx
+import React, { useEffect, useState } from "react";
+import { initAnalytics } from "../firebase";
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export default function FirebaseGuard({ children }) {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    const variant = getCookie("app_variant");
+
+    // 1. STICKINESS VIOLATION CHECK
+    if (variant === "primary" || !variant) {
+      // Bounce them instantly back to the Angular app landing domain
+      const currentPath = window.location.pathname + window.location.search;
+      window.location.replace("https://www.example.com" + currentPath);
+      return;
+    }
+
+    // 2. AUTHORIZED VISITOR
+    setIsAuthorized(true);
+    
+    // Warm up Google Analytics to log active test performance metrics
+    initAnalytics().catch((err) => console.error("Firebase Analytics failed to load:", err));
+  }, []);
+
+  if (!isAuthorized) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+        <h3>Verifying system variant...</h3>
+      </div>
+    );
+  }
+
+  return children;
+}
+
+
+Step 5: Wrap the Application Root
+Open your root app canvas file (typically src/App.jsx) and encapsulate your main design view inside the guard component:
+
+
+
+JavaScript
+// src/App.jsx
+import React from "react";
+import FirebaseGuard from "./components/FirebaseGuard";
+
+function BetaDashboard() {
+  return (
+    <div style={{ padding: "40px", fontFamily: "sans-serif" }}>
+      <h1>Welcome to the React Beta Platform</h1>
+      <p>Your cookie validation succeeded. Google Analytics is now tracking this viewport.</p>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <FirebaseGuard>
+      <BetaDashboard />
+    </FirebaseGuard>
+  );
+}
+
+
+🕹️ Interactive System Flow Simulator
+To help you visualize how changes to your Firebase Console settings alter user behaviors across your multi-app architecture, adjust the split allocations below to trace user lifecycles, cookie assignments, and system responses.
+
+
+
+
