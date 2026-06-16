@@ -1,0 +1,122 @@
+Next.js — that changes things, and it's almost certainly *why* nothing fires. Your `firebase.js` guards with `typeof window !== "undefined"`, which means on the server it returns `null`. So unless `initAnalytics()` is called from a **client component** that actually mounts in the browser, it never runs. Here's the complete working setup.
+
+## 1. Fix `firebase.js`
+
+Add `isSupported()` (the modular SDK can throw without it) and keep it browser-safe:
+
+```javascript
+// lib/firebase.js
+import { initializeApp, getApps } from "firebase/app";
+import { getAnalytics, isSupported } from "firebase/analytics";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAIj4DlKm5ttLUCIYSN0FaYtaEH3c1fJLo",
+  authDomain: "gpt-website-bff63.firebaseapp.com",
+  projectId: "gpt-website-bff63",
+  storageBucket: "gpt-website-bff63.firebasestorage.app",
+  messagingSenderId: "53489334722",
+  appId: "1:53489334722:web:c6b86ad39987840687be5b",
+  measurementId: "G-5762WBEWH6",
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+export const initAnalytics = async () => {
+  if (typeof window === "undefined") return null;
+  if (await isSupported()) {
+    return getAnalytics(app);
+  }
+  return null;
+};
+
+export default app;
+```
+
+## 2. Create a client component that actually calls it
+
+This is the missing piece. It must be `"use client"` and run in `useEffect` (browser-only):
+
+```javascript
+// components/FirebaseAnalytics.jsx
+"use client";
+
+import { useEffect } from "react";
+import { initAnalytics } from "../lib/firebase";
+import { logEvent } from "firebase/analytics";
+
+export default function FirebaseAnalytics() {
+  useEffect(() => {
+    initAnalytics().then((analytics) => {
+      console.log("Firebase analytics:", analytics); // should be an object, not null
+      if (analytics) {
+        logEvent(analytics, "page_view"); // forces the /collect beacon
+      }
+    });
+  }, []);
+
+  return null;
+}
+```
+
+## 3. Mount it at the root
+
+**If you're on the App Router** (`app/` directory), put it in `app/layout.js`:
+
+```javascript
+// app/layout.js
+import FirebaseAnalytics from "../components/FirebaseAnalytics";
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <FirebaseAnalytics />
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
+**If you're on the Pages Router** (`pages/` directory), put it in `pages/_app.js`:
+
+```javascript
+// pages/_app.js
+import FirebaseAnalytics from "../components/FirebaseAnalytics";
+
+export default function App({ Component, pageProps }) {
+  return (
+    <>
+      <FirebaseAnalytics />
+      <Component {...pageProps} />
+    </>
+  );
+}
+```
+
+## 4. Verify
+
+```bash
+npm install
+npm run dev
+```
+
+Open `localhost:3000`, then DevTools:
+
+- **Console** should print `Firebase analytics: [object]` (not `null`).
+- **Network tab**, filter `collect` → you should see `google-analytics.com/g/collect` returning `204`.
+- Run this to confirm the SDK shipped:
+
+```javascript
+performance.getEntriesByType('resource')
+  .map(r => r.name)
+  .filter(n => /firebase|analytics|gtag/.test(n))
+```
+
+Should now return Firebase URLs instead of an empty array.
+
+## Why your version showed nothing
+
+Your current code does three things — defines config, runs `initializeApp` (no network), defines `initAnalytics`. It never does the fourth: **call** `initAnalytics()` from somewhere that runs in the browser. In Next.js a bare `import` won't trigger it, and even if it did, the server pass returns `null`. The client component in `useEffect` is the standard Next.js pattern that fixes both.
+
+The likely cause of nothing firing: there's no component mounting `initAnalytics()`. Can you confirm whether you're on the App Router (`app/`) or Pages Router (`pages/`)? Tell me which and I'll make sure the mount point matches exactly — and once analytics is confirmed firing locally, we can wire up the actual A/B variant tracking on top.
