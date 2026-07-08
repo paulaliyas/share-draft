@@ -1,0 +1,26 @@
+# Some sources consider exposing the Options method a low security risk
+# because malicious clients could use it to determine the methods supported
+# by a web server.
+# The following lines disable the Options method by default,
+# except for CORS preflight requests to /establishment-private
+<IfModule mod_rewrite.c>
+    RewriteEngine on
+    RewriteCond %{REQUEST_METHOD} ^OPTIONS
+    RewriteCond %{REQUEST_URI} !^/establishment-private
+    RewriteRule .* . [F]
+</IfModule>
+
+# CORS Configuration for Angular app
+<Location "/establishment-private">
+    Header always set Access-Control-Allow-Origin "http://ameene2e.gosi.ins"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Origin, Content-Type, Accept, Authorization"
+    Header always set Access-Control-Allow-Credentials "true"
+
+    # Handle preflight OPTIONS requests directly so they don't get
+    # forwarded to the backend / WebLogic
+    <IfModule mod_rewrite.c>
+        RewriteCond %{REQUEST_METHOD} OPTIONS
+        RewriteRule ^(.*)$ $1 [R=200,L]
+    </IfModule>
+</Location>
